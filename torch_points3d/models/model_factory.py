@@ -7,7 +7,7 @@ from omegaconf.dictconfig import DictConfig
 
 
 def instantiate_model(config, dataset) -> BaseModel:
-    """ Creates a model given a datset and a training config. The config should contain the following:
+    """Creates a model given a datset and a training config. The config should contain the following:
     - config.data.task: task that will be evaluated
     - config.model_name: model to instantiate
     - config.models: All models available
@@ -19,7 +19,7 @@ def instantiate_model(config, dataset) -> BaseModel:
 
     dataset = DictConfig(dataset)
     # Find configs
-    models = config.get('models')
+    models = config.get("models")
     model_config = getattr(models, tested_model_name, None)
     if model_config is None:
         models_keys = models.keys() if models is not None else ""

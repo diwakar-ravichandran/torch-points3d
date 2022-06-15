@@ -37,14 +37,14 @@ class TestVisualizer(unittest.TestCase):
 
         mock_num_batches = {"train": 9, "test": 3, "val": 0}
         config = OmegaConf.load(os.path.join(DIR, "test_config/viz/viz_config_indices.yaml"))
-        visualizer = Visualizer(config.visualization, mock_num_batches, batch_size, self.run_path)
+        visualizer = Visualizer(config.visualization, mock_num_batches, batch_size, self.run_path, None)
 
         for epoch in range(epochs):
             run(9, visualizer, epoch, "train", data)
             run(3, visualizer, epoch, "test", data)
             run(2, visualizer, epoch, "val", data)
 
-        self.assertEqual(len(os.listdir(os.path.join(self.run_path, "viz"))), 0)
+        self.assertFalse(os.path.exists(os.path.join(self.run_path, "viz")))
         shutil.rmtree(self.run_path)
 
     def test_indices(self):
@@ -60,18 +60,27 @@ class TestVisualizer(unittest.TestCase):
 
         mock_num_batches = {"train": 9, "test": 3, "val": 0}
         config = OmegaConf.load(os.path.join(DIR, "test_config/viz/viz_config_indices.yaml"))
-        visualizer = Visualizer(config.visualization, mock_num_batches, batch_size, self.run_path)
+        visualizer = Visualizer(config.visualization, mock_num_batches, batch_size, self.run_path, None)
 
         for epoch in range(epochs):
             run(9, visualizer, epoch, "train", data)
             run(3, visualizer, epoch, "test", data)
             run(0, visualizer, epoch, "val", data)
 
-        targets = {'train': set(["1_1.ply", "0_0.ply"]),
-                   'test': set(["0_0.ply"])}
+        targets = {"train": set(["1_1", "0_0"]), "test": set(["0_0"])}
         for split in ["train", "test"]:
             for epoch in range(epochs):
-                self.assertEqual(targets[split], set(os.listdir(os.path.join(self.run_path, "viz", str(epoch), split))))
+                for format in ["ply", "las"]:
+                    files = os.listdir(os.path.join(self.run_path, "viz", str(epoch), split, format))
+                    files = [os.path.splitext(filename)[0] for filename in files]
+
+                    target = targets[split]
+                    target = ["%d_%s" % (epoch, f) for f in target]  # append current epoch to start of target
+                    if format == "las":
+                        target_gt = ["%s_gt" % (x) for x in target]  # add gt files for las
+                        target += target_gt
+
+                    self.assertEqual(set(target), set(files))
         shutil.rmtree(self.run_path)
 
     def test_save_all(self):
@@ -92,15 +101,16 @@ class TestVisualizer(unittest.TestCase):
         mock_num_batches = {"train": num_samples}
 
         config = OmegaConf.load(os.path.join(DIR, "test_config/viz/viz_config_save_all.yaml"))
-        visualizer = Visualizer(config.visualization, mock_num_batches, batch_size, self.run_path)
+        visualizer = Visualizer(config.visualization, mock_num_batches, batch_size, self.run_path, None)
 
         for epoch in range(epochs):
             run(num_samples // batch_size, visualizer, epoch, "train", data)
 
         for split in ["train"]:
             for epoch in range(epochs):
-                current = set(os.listdir(os.path.join(self.run_path, "viz", str(epoch), split)))
-                self.assertGreaterEqual(len(current), num_samples)
+                for format in ["ply", "las"]:
+                    files = set(os.listdir(os.path.join(self.run_path, "viz", str(epoch), split, format)))
+                    self.assertGreaterEqual(len(files), num_samples)
         shutil.rmtree(self.run_path)
 
     def test_pyg_data(self):
@@ -121,17 +131,18 @@ class TestVisualizer(unittest.TestCase):
         mock_num_batches = {"train": num_batches}
 
         config = OmegaConf.load(os.path.join(DIR, "test_config/viz/viz_config_non_deterministic.yaml"))
-        visualizer = Visualizer(config.visualization, mock_num_batches, batch_size, self.run_path)
+        visualizer = Visualizer(config.visualization, mock_num_batches, batch_size, self.run_path, None)
 
         for epoch in range(epochs):
             run(num_batches, visualizer, epoch, "train", data)
 
         count = 0
         for split in ["train"]:
-            target = set(os.listdir(os.path.join(self.run_path, "viz", "0", split)))
-            for epoch in range(1, epochs):
-                current = set(os.listdir(os.path.join(self.run_path, "viz", str(epoch), split)))
-                count += 1 if len(target & current) == 0 else 0
+            for format in ["ply", "las"]:
+                target = set(os.listdir(os.path.join(self.run_path, "viz", "0", split, format)))
+                for epoch in range(1, epochs):
+                    current = set(os.listdir(os.path.join(self.run_path, "viz", str(epoch), split, format)))
+                    count += 1 if len(target & current) == 0 else 0
         self.assertGreaterEqual(count, 4)
         shutil.rmtree(self.run_path)
 
@@ -148,7 +159,7 @@ class TestVisualizer(unittest.TestCase):
 
         mock_num_batches = {"train": 9, "test": 3, "val": 0}
         config = OmegaConf.load(os.path.join(DIR, "test_config/viz/viz_config_deterministic.yaml"))
-        visualizer = Visualizer(config.visualization, mock_num_batches, batch_size, self.run_path)
+        visualizer = Visualizer(config.visualization, mock_num_batches, batch_size, self.run_path, None)
 
         for epoch in range(epochs):
             run(9, visualizer, epoch, "train", data)
@@ -156,9 +167,11 @@ class TestVisualizer(unittest.TestCase):
             run(0, visualizer, epoch, "val", data)
 
         for split in ["train", "test"]:
-            targets = os.listdir(os.path.join(self.run_path, "viz", "0", split))
-            for epoch in range(1, epochs):
-                self.assertEqual(targets, os.listdir(os.path.join(self.run_path, "viz", str(epoch), split)))
+            for format in ["ply", "las"]:
+                targets = os.listdir(os.path.join(self.run_path, "viz", "0", split, format))
+                for epoch in range(1, epochs):
+                    current = os.listdir(os.path.join(self.run_path, "viz", str(epoch), split, format))
+                    self.assertEqual(len(targets), len(current))
         shutil.rmtree(self.run_path)
 
     def tearDown(self):
